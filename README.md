@@ -12,7 +12,6 @@ Here are some features that I plan to impliment:
 
 - Color Selection
 - Command Type Selection (e.g. Python, C, bash, ...)
-- Auto-Spam Mode
 - .cia-Version
 - ...
 
