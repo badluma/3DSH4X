@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <3ds.h>
 
 // Colors
@@ -19,6 +20,7 @@
 // Variables
 u32 kDown;
 u32 kHeld;
+bool autoRun = false;
 
 // Arrays
 const char* commands[] = {
@@ -78,44 +80,72 @@ const char* commands[] = {
 // Functions
 bool buttonPressed()
 {
-	u32 keyPressed = hidKeysDown();
-	if (keyPressed)
-		if (KEY_A || KEY_B || KEY_X || KEY_Y || KEY_DDOWN || KEY_DUP || KEY_DRIGHT || KEY_DLEFT || KEY_R || KEY_ZR || KEY_L || KEY_ZL)
-			return true;
-		else
-			return false;
-	else
-		return false;
-};
+    u32 keyPressed = hidKeysDown();
+    if (keyPressed && !autoRun)
+        if (keyPressed & (KEY_A | KEY_B | KEY_X | KEY_Y | KEY_DDOWN | KEY_DUP | KEY_DRIGHT | KEY_DLEFT | KEY_R | KEY_ZR | KEY_L | KEY_ZL))
+            return true;
+        else
+            return false;
+    else if (autoRun)
+    {
+        svcSleepThread(10000000); 
+        return true;
+    }
+    return false;
+}
+
 char *getRandomCommand()
 {
-	int index = rand() % (sizeof(commands) / sizeof(commands[0]));
-	return commands[index];
+    int index = rand() % (sizeof(commands) / sizeof(commands[0]));
+    return commands[index];
 }
 
 int main(int argc, char* argv[])
 {
-	gfxInitDefault();
-	consoleInit(GFX_TOP, NULL);
+    gfxInitDefault();
 
-	printf("Hello, world!\n");
+    PrintConsole topConsole, bottomConsole;
+    consoleInit(GFX_TOP, &topConsole);
+    consoleInit(GFX_BOTTOM, &bottomConsole);
 
-	// Main loop
-	while (aptMainLoop())
-	{
-		gspWaitForVBlank();
-		gfxSwapBuffers();
-		hidScanInput();
+    srand(time(NULL));
 
-		if (buttonPressed())
-		{
-			printf("%s\n", getRandomCommand());
-		}
-		u32 kDown = hidKeysDown();
-		if (kDown & KEY_START)
-			break; // break in order to return to hbmenu
-	}
+    // Print initial message on both screens
+    consoleSelect(&topConsole);
+    printf("\x1b[32mgithub.com/badluma/3DSH4X\x1b[0m\n");
+    consoleSelect(&bottomConsole);
+    printf("\x1b[32mSTART:BREAK -- SELECT:AUTO\x1b[0m\n");
 
-	gfxExit();
-	return 0;
+    while (aptMainLoop())
+    {
+        gspWaitForVBlank();
+        hidScanInput();
+
+        if (buttonPressed())
+        {
+            // Get two different random commands
+            char *cmd1 = getRandomCommand();
+            char *cmd2;
+            do {
+                cmd2 = getRandomCommand();
+            } while (cmd2 == cmd1);
+
+            // Print on top screen
+            consoleSelect(&topConsole);
+            printf("\x1b[32m%s\x1b[0m\n", cmd1);
+
+            // Print on bottom screen
+            consoleSelect(&bottomConsole);
+            printf("\x1b[32m%s\x1b[0m\n", cmd2);
+        }
+
+        u32 kDown = hidKeysDown();
+        if (kDown & KEY_START)
+            break;
+        if (kDown & KEY_SELECT)
+            autoRun = !autoRun;
+    }
+
+    gfxExit();
+    return 0;
 }

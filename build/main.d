@@ -1,5 +1,4 @@
-main.o: \
- /Users/silasbergen/Documents/Developement/3DS/H4X3DS/source/main.c \
+main.o: /Users/silasbergen/Documents/GitHub/3DSH4X/source/main.c \
  /opt/devkitpro/libctru/include/3ds.h \
  /opt/devkitpro/libctru/include/3ds/types.h \
  /opt/devkitpro/libctru/include/3ds/result.h \
