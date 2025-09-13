@@ -4,6 +4,7 @@
 #include <time.h>
 #include <3ds.h>
 
+
 // ANSI color codes for 3DS console
 char *colors[] = {
     "\x1b[32m", // Green
@@ -15,16 +16,14 @@ char *colors[] = {
     "\x1b[37m", // White
 };
 
-int color = 0;
-int prevColor = 0; // Track previous color
+enum LanguageMode { BASH = 0, PYTHON, C, NUM_LANGUAGES };
 
-// Variables
-u32 kDown;
-u32 kHeld;
+int color = 0;
+int commandMode = BASH;
 bool autoRun = false;
 
 // Arrays
-const char* commands[] = {
+const char* bashCommands[] = {
     "sudo rm -rf /home/badluma/*",
     "curl -X POST http://badluma.com/exec",
     "chmod 777 /3ds/homebrew/badluma",
@@ -77,11 +76,125 @@ const char* commands[] = {
     "sudo mount -t ext2 /dev/sdi1 /mnt",
     "sudo mount -t iso9660 /dev/sdj1 /mnt"
 };
+const char* pythonCommands[] = {
+    "badluma_init_3ds()",
+    "connect_3ds_handshake",
+    "BADLUMA>scan_devices",
+    "INIT_3DS_MODULE_OK",
+    "PATCH apply v1.0",
+    "load_theme:badluma.thm",
+    "dump_mem_hex(0x1000)",
+    "set_display_top_on",
+    "unlock_banner_stub",
+    "badluma_auth_user",
+    "    boot_seq_start()",
+    "    log_WARN_overlay",
+    "    ERROR_gfx_swap",
+    "    /3ds/screen_top.img",
+    "    badge=badluma_v1",
+    "    payload_bin_staged",
+    "    b64_YmFkbHVtYQ==",
+    "    {'user':'badluma'}",
+    "    shell_echo('ok')",
+    "    sysctl_3ds_maxfps60",
+    "    debug_trace_start()",
+    "    dump_framebuffer()",
+    "    mem_read(0xDEAD)",
+    "    file_badluma_cfg",
+    "    hex_deadbeef",
+    "    banner_bmp->/3ds/",
+    "    ui_patch_apply()",
+    "    overlay_hide_all()",
+    "    sync_to_cloud()",
+    "    probe_audio()",
+
+    "    badge_verify()",
+    "    3ds_emu_ping()",
+    "    keyring_locked_False",
+    "    tcp_connect_192_0_2_1",
+    "    wget_badluma_assets",
+    "spawn_thread_ui()",
+    "kill_thread_ui_worker()",
+    "restart_3ds_service()",
+    "ntp_sync_2025_09_13",
+    "report_to_badluma_logs",
+
+    "banner='BADLUMA X 3DS'",
+    "sigcheck_ver_0x1A",
+    "patchlist=['3ds','bad']",
+    "exec_3ds_shell()",
+    "run_diag_sequence()",
+    "scan_quick_fast()",
+    "ls_/3ds/badluma/",
+    "cat_/3ds/banner.txt",
+    "badluma_alert!!!",
+    "    end_of_session"
+};
+const char* cCommands[] = {
+    "#include <stdio.h>",
+    "int main(void) {",
+    "char buf[256];",
+    "for(int i=0;i<10;i++){",
+    "printf(\"Hello 3DS\\n\");",
+    "if(x==42) return 0;",
+    "switch(mode){case 1:break;}",
+    "struct Node {int id;};",
+    "typedef unsigned int u32;",
+    "enum State {ON,OFF};",
+
+    "    while(ptr!=NULL){",
+    "    memcpy(dst,src,64);",
+    "    printf(\"%d\\n\",value);",
+    "    if(flag) continue;",
+    "    break;",
+    "    *p = '\\0';",
+    "    for(size_t i=0;i<n;i++)",
+    "    scanf(\"%s\",buf);",
+    "    fclose(fp);",
+    "    return EXIT_SUCCESS;",
+
+    "    int arr[3] = {1,2,3};",
+    "    do {i++;} while(i<10);",
+    "    fprintf(stderr,\"err\\n\");",
+    "    #define MAX_LEN 128",
+    "    static int counter=0;",
+    "    double pi=3.14159;",
+    "    const char* msg=\"3ds\";",
+    "    case 2: value+=1; break;",
+    "    default: return -1;",
+    "    inline void nop(void){}", 
+
+    "FILE* fp=fopen(\"file.txt\",\"r\");",
+    "size_t len=strlen(str);",
+    "unsigned long addr=0x3DS;",
+    "short s=0; long l=1000;",
+    "float f=0.5f;",
+    "goto cleanup;",
+    "break;",
+    "continue;",
+    "register int r=0;",
+    "sizeof(int);",
+
+    "    const int three=3;",
+    "    union Data {int x;float y;};",
+    "    char* ptr=NULL;",
+    "    if(ptr==NULL) return;",
+    "    switch(key){case'A':break;}",
+    "    puts(\"Nintendo 3DS\");",
+    "    int sum=a+b;",
+    "    volatile int lock=1;",
+    "    signed char c='A';",
+    "    // end of block"
+};
 
 // Function declarations
+void clearAndPrintHeader(PrintConsole* top, PrintConsole* bottom);
+void handleColorChange(PrintConsole* top, PrintConsole* bottom);
+void handleLanguageChange(PrintConsole* top, PrintConsole* bottom);
 bool buttonPressed();
-char *getRandomCommand();
-char *selectColor();
+char* getRandomCommand();
+const char* getLanguageName(int mode);
+void printRandomCommands(PrintConsole* top, PrintConsole* bottom);
 
 int main(int argc, char* argv[])
 {
@@ -93,50 +206,20 @@ int main(int argc, char* argv[])
 
     srand(time(NULL));
 
-    // Initial header print
-    consoleSelect(&topConsole);
-    printf("%sgithub.com/badluma/3DSH4X\x1b[0m\n", colors[color]);
-    consoleSelect(&bottomConsole);
-    printf("%sSTART:BREAK -- SELECT:AUTO\x1b[0m\n", colors[color]);
+    clearAndPrintHeader(&topConsole, &bottomConsole);
 
     while (aptMainLoop())
     {
         gspWaitForVBlank();
         hidScanInput();
-        kDown = hidKeysDown();
-        kHeld = hidKeysHeld();
 
-        // Detect color change
-        int oldColor = color;
-        selectColor();
-        if (color != oldColor) {
-            // Clear both screens and print header in new color
-            consoleSelect(&topConsole);
-            printf("\x1b[2J"); // Clear screen
-            printf("%sgithub.com/badluma/3DSH4X\x1b[0m\n", colors[color]);
-            consoleSelect(&bottomConsole);
-            printf("\x1b[2J"); // Clear screen
-            printf("%sSTART:BREAK -- SELECT:AUTO\x1b[0m\n", colors[color]);
-        }
+        handleColorChange(&topConsole, &bottomConsole);
+        handleLanguageChange(&topConsole, &bottomConsole);
 
         if (buttonPressed())
-        {
-            // Get two different random commands
-            char *cmd1 = getRandomCommand();
-            char *cmd2;
-            do {
-                cmd2 = getRandomCommand();
-            } while (cmd2 == cmd1);
+            printRandomCommands(&topConsole, &bottomConsole);
 
-            // Print on top screen
-            consoleSelect(&topConsole);
-            printf("%s%s\x1b[0m\n", colors[color], cmd1);
-
-            // Print on bottom screen
-            consoleSelect(&bottomConsole);
-            printf("%s%s\x1b[0m\n", colors[color], cmd2);
-        }
-
+        u32 kDown = hidKeysDown();
         if (kDown & KEY_START)
             break;
         if (kDown & KEY_SELECT)
@@ -148,6 +231,49 @@ int main(int argc, char* argv[])
 }
 
 // Function definitions
+
+void clearAndPrintHeader(PrintConsole* top, PrintConsole* bottom)
+{
+    consoleSelect(top);
+    printf("\x1b[2J");
+    printf("%s[%s] github.com/badluma/3DSH4X\x1b[0m\n", colors[color], getLanguageName(commandMode));
+    consoleSelect(bottom);
+    printf("\x1b[2J");
+    printf("%sSTART:BREAK -- SELECT:AUTO\x1b[0m\n", colors[color]);
+}
+
+void handleColorChange(PrintConsole* top, PrintConsole* bottom)
+{
+    static int prevColor = -1;
+    u32 kDown = hidKeysDown();
+    u32 kHeld = hidKeysHeld();
+
+    if (kHeld & KEY_L && kDown & KEY_X) {
+        color = (color + 1) % (sizeof(colors) / sizeof(colors[0]));
+    }
+
+    if (color != prevColor) {
+        clearAndPrintHeader(top, bottom);
+        prevColor = color;
+    }
+}
+
+void handleLanguageChange(PrintConsole* top, PrintConsole* bottom)
+{
+    static int prevMode = -1;
+    u32 kDown = hidKeysDown();
+    u32 kHeld = hidKeysHeld();
+
+    if (kHeld & KEY_L && kDown & KEY_A) {
+        commandMode = (commandMode + 1) % NUM_LANGUAGES;
+    }
+
+    if (commandMode != prevMode) {
+        clearAndPrintHeader(top, bottom);
+        prevMode = commandMode;
+    }
+}
+
 bool buttonPressed()
 {
     u32 keyPressed = hidKeysDown();
@@ -158,34 +284,62 @@ bool buttonPressed()
             return false;
     else if (autoRun)
     {
-        svcSleepThread(10000000); 
+        u64 sleepTime = 10000000 + (rand() % (90000000));
+        svcSleepThread(sleepTime);
         return true;
     }
     return false;
 }
 
-char *getRandomCommand()
+char* getRandomCommand()
 {
-    int index = rand() % (sizeof(commands) / sizeof(commands[0]));
-    return commands[index];
-}
-char *selectColor()
-{
-    if (kHeld & KEY_L && kDown & KEY_X)
-        if (color < 6)
-            color++;
-        else
-            color = 0;
-    
-    switch (color)
-    {
-        case 0: return colors[0];
-        case 1: return colors[1];
-        case 2: return colors[2];
-        case 3: return colors[3];
-        case 4: return colors[4];
-        case 5: return colors[5];
-        case 6: return colors[6];
-        default: return colors[0];
+    const char **cmdArray;
+    int cmdCount;
+
+    switch (commandMode) {
+        case BASH:
+            cmdArray = bashCommands;
+            cmdCount = sizeof(bashCommands) / sizeof(bashCommands[0]);
+            break;
+        case PYTHON:
+            cmdArray = pythonCommands;
+            cmdCount = sizeof(pythonCommands) / sizeof(pythonCommands[0]);
+            break;
+        case C:
+            cmdArray = cCommands;
+            cmdCount = sizeof(cCommands) / sizeof(cCommands[0]);
+            break;
+        default:
+            cmdArray = bashCommands;
+            cmdCount = sizeof(bashCommands) / sizeof(bashCommands[0]);
+            break;
     }
+
+    int index = rand() % cmdCount;
+    return (char *)cmdArray[index];
+}
+
+const char* getLanguageName(int mode)
+{
+    switch (mode) {
+        case BASH: return "BASH";
+        case PYTHON: return "PYTHON";
+        case C: return "C";
+        default: return "BASH";
+    }
+}
+
+void printRandomCommands(PrintConsole* top, PrintConsole* bottom)
+{
+    char *cmd1 = getRandomCommand();
+    char *cmd2;
+    do {
+        cmd2 = getRandomCommand();
+    } while (cmd2 == cmd1);
+
+    consoleSelect(top);
+    printf("%s%s\x1b[0m\n", colors[color], cmd1);
+
+    consoleSelect(bottom);
+    printf("%s%s\x1b[0m\n", colors[color], cmd2);
 }

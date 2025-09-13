@@ -185,21 +185,7 @@ endif
 #---------------------------------------------------------------------------------
 clean:
 	@echo clean ...
-	@rm -fr $(BUILD) $(TARGET).3dsx $(OUTPUT).smdh $(TARGET).elf $(GFXBUILD) $(CIA_OUT)
-
-#---------------------------------------------------------------------------------
-# CIA build options
-#---------------------------------------------------------------------------------
-MAKEROM ?= makerom
-RSF ?= app.rsf
-CIA_OUT ?= $(TARGET).cia
-
-#---------------------------------------------------------------------------------
-.PHONY: cia
-
-cia: all $(OUTPUT).elf $(OUTPUT).3dsx
-	@echo "Building CIA..."
-	@$(MAKEROM) -f cia -o $(CIA_OUT) -rsf $(RSF) -target t -exefslogo -elf $(OUTPUT).elf -icon $(APP_ICON) -banner banner.bin
+	@rm -fr $(BUILD) $(TARGET).3dsx $(OUTPUT).smdh $(TARGET).elf $(GFXBUILD)
 
 #---------------------------------------------------------------------------------
 $(GFXBUILD)/%.t3x	$(BUILD)/%.h	:	%.t3s
